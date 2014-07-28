@@ -1,45 +1,40 @@
 #include <SoftwareSerial.h>
+#include <stdarg.h>
 #include "credentials.h"
-
-#define POST_STRING_START "POST /update HTTP/1.1\nX-THINGSPEAKAPIKEY: "
-#define POST_STRING_MIDDLE "\nContent-Type: application/x-www-form-urlencoded\nfield1="
 
 SoftwareSerial wifiSerial(10, 11); // RX, TX
 
-void setup(){
+int8_t sendATcommand(const char* expected_answer1, const char* expected_answer2, unsigned int timeout, unsigned int argc, ...);
+
+void setup() {
 
   Serial.begin(9600);
   Serial.println("Begin");
   wifiSerial.begin(9600);
 
-  return;
-
   int result;
-  result = sendATcommand("+++", "",                  "+OK", "+ERR", 100);
-  result = sendATcommand("AT+WPRT=!0", "",           "+OK", "+ERR", 100);
-  result = sendATcommand("AT+ATPT=!100", "",         "+OK", "+ERR", 100);
-  result = sendATcommand("AT+SSID=!", WIFI_SSID,   "+OK", "+ERR", 100);
-  result = sendATcommand("AT+ENCRY=!6", "",        "+OK", "+ERR", 100);
-  result = sendATcommand("AT+KEY=!1,1,", WIFI_PASSWORD, "+OK", "+ERR", 100);
-  result = sendATcommand("AT+Z", "", "+OK", "+ERR", 100);
-  delay(10000); // wait for reset
-  result = sendATcommand("AT+LKSTT", "", "+OK", "+ERR", 100);
-  result = sendATcommand("AT+SKCLS=1", "", "+OK", "+ERR", 100);
-  Serial.println(result);  
 
+  result = sendATcommand("+OK", "+ERR", 100, 1, "+++");
+  result = sendATcommand("+OK", "+ERR", 100, 1,"AT+WPRT=!0");
+  result = sendATcommand("+OK", "+ERR", 100, 1,"AT+ATPT=!100");
+  result = sendATcommand("+OK", "+ERR", 100, 2,"AT+SSID=!", WIFI_SSID);
+  result = sendATcommand("+OK", "+ERR", 100, 1,"AT+ENCRY=!6");
+  result = sendATcommand("+OK", "+ERR", 100, 2,"AT+KEY=!1,1,", WIFI_PASSWORD);
+  result = sendATcommand("+OK", "+ERR", 100, 1,"AT+Z");
+  delay(10000); // wait for reset
+  result = sendATcommand("+OK", "+ERR", 100, 1,"AT+LKSTT");
+  result = sendATcommand("+OK", "+ERR", 100, 1,"AT+SKCLS=1");
 }
 
 void loop(){
 
-  return;
-
   int result;
 
-  result = sendATcommand("AT+SKCT=0,0,api.thingspeak.com, 80","", "+OK", "+ERR", 100);
+  result = sendATcommand("+OK", "+ERR", 100, 1, "AT+SKCT=0,0,api.thingspeak.com, 80");
   delay(2000);
-  result = sendATcommand("AT+SKSTT=1","", "+OK", "+ERR", 100);
-  result = sendATcommand("AT+SKSND=1,POST /update HTTP/1.1\nX-THINGSPEAKAPIKEY: XXX\nContent-Type: application/x-www-form-urlencoded\nfield1=9", "",  "+OK", "+ERR", 100); 
-  result = sendATcommand("AT+SKCLS=1", "", "+OK", "+ERR", 100);
+  result = sendATcommand("+OK", "+ERR", 100, 1, "AT+SKSTT=1");
+  result = sendATcommand("+OK", "+ERR", 100, 4, "AT+SKSND=1,POST /update HTTP/1.1\nX-THINGSPEAKAPIKEY:", THING_SPEAK_API_KEY, "\nContent-Type: application/x-www-form-urlencoded\nfield1=", "9");
+  result = sendATcommand("+OK", "+ERR", 100, 1, "AT+SKCLS=1");
 
   delay(60000);  
 
@@ -48,13 +43,20 @@ void loop(){
 //
 // 
 //
-int8_t sendATcommand(const char* ATcommand1, const char* ATcommand2, const char* expected_answer1, const char* expected_answer2, unsigned int timeout) {
+int8_t sendATcommand(const char* expected_answer1, const char* expected_answer2, unsigned int timeout, unsigned int argc, ...) {
+
+  va_list args;
+  va_start(args, timeout);
+
+  char* command;
 
   const int responseSize = 100;
 
   Serial.print("SENDING ");
-  Serial.print(ATcommand1);
-  Serial.println(ATcommand2);
+  for(int i=0; i < argc; i++) {
+    Serial.print(va_arg(args, char* ));
+  }
+  Serial.println("");
 
   uint8_t x=0,  answer=0;
   char response[responseSize];
@@ -66,8 +68,11 @@ int8_t sendATcommand(const char* ATcommand1, const char* ATcommand2, const char*
     wifiSerial.read();    // Clean the input buffer
   }
 
-  wifiSerial.print(ATcommand1);    // Send the AT command 
-  wifiSerial.println(ATcommand2);    // Send the AT command 
+  for(int i=0; i < argc; i++) {
+    wifiSerial.print(va_arg(args, char* ));
+  }
+  wifiSerial.println("");
+
 
   x = 0;
   previous = millis();
@@ -100,8 +105,18 @@ int8_t sendATcommand(const char* ATcommand1, const char* ATcommand2, const char*
   // Waits for the asnwer with time out
   while((answer == 0) && ((millis() - previous) < timeout));    
 
+  if(answer == 0) {
+    Serial.println("TIMEOUT");
+  }
+
+  va_end(args); 
+
+  Serial.print("ANSWER:");
+  Serial.println(answer);  
   return answer;
 }
+
+
 
 
 
